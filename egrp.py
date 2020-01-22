@@ -1,10 +1,6 @@
 from selenium import webdriver
 from mydatabase import *
 from sqlalchemy.orm import sessionmaker
-from scrapy.http import HtmlResponse
-
-# from scrapy import Selector
-from scrapy.selector import Selector
 import re
 import time
 import os
@@ -12,8 +8,6 @@ import pandas
 
 
 class Egrp365:
-    # __slots__ = ['params']
-
     def __init__(self, params=None, param=None):
         options = webdriver.ChromeOptions()
         options.add_argument("headless")
@@ -59,22 +53,34 @@ class Egrp365:
             # i.click()
         # click = list_search.find_element_by_link_text("params").click()
         # time.sleep(3)
-        # self.save_parse(params)
-        self.parse_re(self.driver.current_url)
-        print(self.driver.current_url)
+        self.save_parse(params)
 
-    def save_parse(self, params=None):
+    def save_parse(self, params):
         # try/exept
         table = self.driver.find_elements_by_id("mapFlyout")
         table_flat = self.driver.find_elements_by_id("information_about_object")
 
         if len(table) > 0:
-            self.parse_text_house(table)
+            div_talbe = self.driver.find_element_by_css_selector("div.table")
+            self.parse_re1(div_talbe)
+
         elif len(table_flat) > 0:
-            self.parse_text_flat(table_flat)
-            # self.driver.quit()
+            div_infor = self.driver.find_element_by_css_selector(
+                "div#information_about_object"
+            )
+            div_infor = list(filter(None, div_infor.text.split("\n")))
+            self.parse_re(div_infor)
         else:
-            self.save_none(params)
+            querry = Address(
+                address=params,
+                kadastor=None,
+                descrip=None,
+                flar=None,
+                okato=None,
+                type_f=None,
+                link=None,
+            )
+            self.querry_commit(querry)
 
     def querry_commit(self, querry):
         self.Session = sessionmaker()
@@ -82,65 +88,59 @@ class Egrp365:
         self.session = self.Session()
         try:
             self.session.add(querry)
-            # self.session.commit()
+            self.session.commit()
         except:
             print("no add")
+        time.sleep(2)
         # self.driver.quit()
 
-    def save_none(self, params):
-        querry = AddressNone(params)
+    def parse_re(self, div_infor):
+
+        param = []
+        for i in div_infor:
+            param.append(re.search("\w+ — (?P<param>.+)", i).group("param"))
+
+        kadastor, _, descrip, floar, area, address = param
+        flar = str(floar + " " + area)
+        print(param)
+        querry = Address(
+            address=address,
+            kadastor=kadastor,
+            descrip=descrip,
+            flar=flar,
+            okato=None,
+            type_f=None,
+            link=None,
+        )
         self.querry_commit(querry)
 
-    def parse_text_house(self, table):
-        tables = []
-        for i in table:
-            tables.extend(i.text.split("\n"))
-        print(tables[:10])
-        # OrderedDict
-        dict_house = dict(zip(tables[2:17:2], tables[3:17:2]))
-        querry = House(*dict_house.values())
+    def parse_re1(self, div_talbe):
+        table = div_talbe.text.split("\n")
+        _, address, okato, _, kadastor, *rest = table[1::2]
+        ##apFlyout > ul > li:nth-child(9) > a
+        link = div_talbe.find_element_by_css_selector(
+            "li:nth-child(9) > a"
+        ).get_attribute("href")
+        querry = Address(
+            address=address,
+            kadastor=kadastor,
+            descrip=None,
+            flar=None,
+            okato=okato,
+            type_f=None,
+            link=link,
+        )
         self.querry_commit(querry)
-        # self.driver.quit()
-        print(dict_house)
-
-    def parse_text_flat(self, table_flat):
-        tables = []
-        for i in table_flat:
-            tables.extend(i.text.split("\n"))
-        tables = list(filter(None, tables))
-        # table = [n.split("—") for n in tables]
-        table = []
-        for n in tables:
-            table.extend(n.split("—"))
-        print(table[:10])
-        dict_flat = dict(zip(table[::2], table[1::2]))
-        querry = Flat(*dict_flat.values())
-        self.querry_commit(querry)
-        # self.driver.quit()
-        print(dict_flat)
-
-    def parse_re(self, current_url):
-        # scrapy
-        regex = "(?P<address>\S+) \n (?P<okato>\S+) (?P<kadastr>\S+) "
-        table = []
-        # for i in tables:
-        #   table.extend(i.text.split("\n"))
-
-        # table = list(filter(None, table))
-        self.response = HtmlResponse(url=current_url, body=body)
-        self.sel = Selector(response=self.response)
-        print(self.sel.xpath("//li/span/text()").getall())
-        print(self.response.xpath("//title/text()").getall())
 
 
 if __name__ in "__main__":
 
-    # pars = Egrp365(params="Москва ул Кутузова, д 3 1")
-    # pars = Egrp365(params='129327, Москва г, , ул. Чичерина, д. 2/9, кв. 233')
+    # parsh = Egrp365(params="Москва ул Кутузова, д 1")
+    # pars = Egrp365(params="129327, Москва г, , ул. Чичерина, д. 2/9, кв. 33")
     # pars.save_parse()
     # г Щербинка, ул Кутузова, д. 1, 1
     xml = pandas.read_excel("testxml.xlsx")
     values = xml["Adress"].values
 
-    egrp = Egrp365(param=values[4:5])
+    egrp = Egrp365(param=values[1:5])
 
